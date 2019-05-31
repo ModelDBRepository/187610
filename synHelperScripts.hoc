@@ -1,0 +1,106 @@
+// DEFINE FUNCTIONS THAT HELP WITH SYNAPSE ALLOCATION.
+
+// identify vgat synapses that are part of a given branch
+// provide a SectionRef instance to seek, and optionally, two x values for 
+// low and high values to seek.
+// $o1: SectionRef instance.
+// $2,$3: optional, variables, low and high values to constrain results.
+// NOTE: $2 and $3 are currently implemented to work with EFFECTIVE x values,
+// 	not the true x values.
+strdef seekSecName
+obfunc getVgatInds(){local theX localobj vecOfInds
+
+	vecOfInds = new Vector(0)
+	
+	
+	$o1.sec { seekSecName = secname() }
+	for ii=1,totVgatAt {
+		{ 
+			theX = synVgatAt[ii-1].get_loc() 
+			theX = synVgatAt[ii-1].xEff
+			
+			if(abs(strcmp(secname(),seekSecName))<0.00001){
+				if(numarg()>1.1){
+					// x values supplied
+					if(theX>$2&&theX<$3){	
+						vecOfInds.append(ii-1)
+					}
+				}else{
+					// no x values supplied, simply take
+					vecOfInds.append(ii-1)
+				}
+			}
+			pop_section()
+		}
+	}
+	return vecOfInds
+}
+
+theRandomSeed = 1000000
+// Sample values from the given vector without replacement.  
+// $o1: Vector.  The vector of values to sample from.
+// $2: numeric.  The number of values to sample.
+// $3: numeric.  The seed.  If set =-1 (or just <=-0.1), sets a random seed that increments.  If >-0.1, uses
+//	the supplied seed.
+obfunc sampleNoReplace(){local tempRand,jj localobj randGen,theOut,theOut2
+	if($2>$o1.size()){
+		//print "Number of items to return exceeds vector size."
+		//print "Returning the original vector."
+		//print "Wanted/got:",$2,$o1.size()
+		return $o1
+	}
+	
+	if($2<0.0001){
+		theOut2 = new Vector()
+		return theOut2
+	}
+	
+	if($3>(-0.1)) {
+		// supplied a random seed; go with it.
+		randGen = new Random($3)
+	}else{
+		// define a random number generator with new seed
+		randGen = new Random(theRandomSeed)
+		theRandomSeed+=1
+	}
+	randGen.uniform(0,$o1.size())
+	theOut = new Vector()
+	theOut2 = new Vector($2)
+	while(1){
+		tempRand = int(randGen.repick())
+		// add new number if not present
+		if(theOut.contains(tempRand)){
+			// do nothing
+		}else{
+			// add
+			theOut.append(tempRand)
+		}
+		
+		if(abs(theOut.size()-$2)<0.0001){
+			// have filled the desired vector.			
+			for jj=1,$2{
+				theOut2.x[jj-1] = $o1.x[theOut.x[jj-1]]
+			}
+			return theOut2
+		}
+	}
+}
+
+// Sample a given branch (and potential limits on x locations) to identify the 
+// a subset of synapses.  This is used for tagging VGAT+ synapses as other types
+// of synapses.
+// $o1: SectionRef.  The section to look at.
+// $2: numeric.  The number of sampled synapse indices to return.
+// $3: numeric.  The seed to use.
+// $3,$4: numerics (optional).  The low and high x values to consider for the 
+//	particular SectionRef.
+obfunc synIndSubset(){localobj allInds,theOut
+	allInds = new Vector()
+	if(numarg()<3.1){
+		allInds = getVgatInds($o1)
+	}else{
+		allInds = getVgatInds($o1,$4,$5)
+	}
+	theOut = sampleNoReplace(allInds,$2,$3)
+	return theOut
+}

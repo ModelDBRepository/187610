@@ -1,0 +1,43 @@
+celsius = 35
+v_init=-70
+global_ra=200.00 	// internal resistivity in ohm-cm 
+Cm=1.5 //0.75		// specific membrane capacitance in uF/cm^2 
+Cmy=0.075 		// capacitance in myelin 
+Rm=40000		// specific membrane resistivity in ohm-cm^2  
+Rn=50			// nodal resistivity 
+Vleak=-46		// switched from -66, in order to give a proper resting potential
+Vrest=-70		// resting potential -60 in control, -66 in Cs+
+
+spinelimit=100      	// distance beyond which to modify for spines 
+spinefactor=2.0     	// factor by which to change passive properties 
+
+setgk = .036		// A-type potassium starting density, used in init_bday.hoc
+setokslope = 0		// slope of A-type potassium conductance along individual oblique branches. set to 0 in all simulations
+
+gkdr=0.040          	// delayed rectifier density 
+gkap=setgk          	// proximal A-type potassium starting density 
+gkad=setgk          	// distal A-type potassium  starting density 
+
+dlimit=300	    	// cut-off for increase of A-type density 
+dprox=50           	// distance to switch from proximal to distal type 
+dslope=0.01         	// slope of A-type density 
+
+okslope = setokslope	// oblique potassium channel gradient 
+okmax = .5		// max potassium channel conductance  
+
+ampaWeight = 0.00018 	// in uS; 0.00018 used in Jarsky et al 2005
+nmdaWeight = 0.00018	// in uS
+
+gnaSoma = 0.1
+gnaSr = 0.03
+gnaSlm = 0.03
+
+// Inhibition parameters.
+inhRev = -75
+
+npyTau1 = 0.1
+npyTau2 = 10
+sstTau1 = 0.2 // from Maccaferri et al., 2000
+sstTau2 = 18 // from Maccaferri et al., 2000
+npyWeight = 0.001 // from Maccaferri et al., 2000
+sstWeight = 0.001 // from Maccaferri et al 2000

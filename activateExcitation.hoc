@@ -1,0 +1,66 @@
+// This function turns on a given number of excitatory synapses contained within a 
+// given SectionList.  This function is analogous to the activateInhibition()
+// proc but does not do anything genotype-specific.
+//
+// !!NOTE!!: this function does not attempt to turn off
+// all synapses before activating the desired synapses.  It merely sets a 
+// subset of synapses to "on", agnostic to whether they were previously on
+// or not.  Note, however, that this function can be called twice to first
+// turn all synapses off, and then turn on only the desired synapses.  See
+// notes below.
+//
+// This function can also be used to toggle off synapses in the following way:
+// A) to shut off all synapses in a given SectionList, set $2<0.
+// B) to shut off all synapses in all sections, set $2<0 and set $o2 to be
+//	the whole tree.
+//
+// Also, to activate all synapses in a given region, just set $2 to be a huge
+//	number; this will activate all of the synapses in the desired region.
+//
+// INPUT:
+// $o1: SectionList instance.  Sections to draw from.
+// $2: variable.  Number of synapses to activeate.
+// $3: variable.  The seed to assign.
+//
+// OUTPUT:
+// the .isOn flag is toggled as desired for the synapses selected.
+//
+
+strdef curGenStr
+obfunc activateExcitation() {local ii localobj allSyns,theSec,finalSyns
+	allSyns = new Vector() // all (potential) synapses that qualify for activation	
+	finalSyns = new Vector() // vector of synapse indices that will be activated
+	
+	
+	// interate over all synapses, adding those that are in the right
+	// domain.
+	for ii=0,nExc-1{
+		synAmpa[ii].get_loc()
+		theSec = new SectionRef()
+		if(sectionRefInList(theSec,$o1)){
+			allSyns.append(ii)
+		}
+		pop_section()
+	}
+	
+	if($2<0){
+		// Want to shut off all synapses in the provided region.
+		for ii=0,allSyns.size()-1{
+			synAmpa[allSyns.x[ii]].isOn = 0
+			synNmda[allSyns.x[ii]].isOn = 0
+		}
+		return finalSyns
+	}else{		
+		// Choose random indices from desired subset.
+		finalSyns = sampleNoReplace(allSyns,$2,$3)  // supply non-random seed
+		
+		// Activate these synapses.
+		for ii=0,finalSyns.size()-1{
+			synAmpa[finalSyns.x[ii]].isOn=1
+			synNmda[finalSyns.x[ii]].isOn=1
+		}
+		return finalSyns
+	}
+}
+		
+		

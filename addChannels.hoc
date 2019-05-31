@@ -1,0 +1,132 @@
+// DECLARE OBJECTS TO BE ASSIGNED DURING initChannels() CALL
+objref osec[10]
+
+
+// LOAD PARAMETERS FOR CHANNELS
+{
+	load_file("channelParameters.hoc")
+}
+
+proc initChannels(){
+	// add in voltage-gated channels
+	{
+		forall {
+			insert pas  g_pas=1/(Rm)  Ra=global_ra  e_pas=Vleak
+			insert id
+		}
+		
+		soma.sec { 
+			insert nax  gbar_nax=gnaSoma  
+			insert kdr  gkdrbar_kdr=gkdr
+			insert kap  gkabar_kap=gkap
+			insert kad  gkabar_kad=0
+			insert pas	e_pas=Vleak  g_pas=1/Rm   Ra=global_ra  cm=Cm
+		}
+		
+
+		forsec basalList {
+			insert pas	e_pas=Vleak  Ra=global_ra 
+			for (x) {
+				xdist=distance(x)
+				if (xdist <= spinelimit) {
+					g_pas(x) = 1/Rm
+					cm(x) = Cm
+				} else {
+					g_pas(x) = spinefactor/Rm
+					cm(x) = spinefactor*Cm
+				}
+			}
+			insert nax	
+			insert kdr	gkdrbar_kdr=gkdr
+			insert kap
+			insert kad
+			gkabar_kap = 0
+			gkabar_kad = 0
+			
+			for (x) {
+				xdist = distance(x)
+				xdistNoLimit = xdist
+				if (xdist > dlimit) {
+					xdist = dlimit
+				}
+				gkabar_kap(x) = 0
+				gkabar_kad(x) = 0
+				if (xdist > dprox) {
+					gkabar_kad(x) = gkad*(1+xdist*dslope)
+				} else {
+					gkabar_kap(x) = gkap*(1+xdist*dslope)
+				}
+			}
+			
+		}
+		
+		soma.sec {
+			area(0.5)
+			distance()
+		}
+			
+		forsec apicalList {
+			insert pas	e_pas=Vleak  Ra=global_ra 
+			for (x) {
+				xdist=distance(x)
+				if (xdist <= spinelimit) {
+					g_pas(x) = 1/Rm
+					cm(x) = Cm
+				} else {
+					g_pas(x) = spinefactor/Rm
+					cm(x) = spinefactor*Cm
+				}
+			}
+			insert nax	
+			insert kdr	gkdrbar_kdr=gkdr
+			insert kap
+			insert kad
+			gkabar_kap = 0
+			gkabar_kad = 0
+			
+			for (x) {
+				xdist = distance(x)
+				xdistNoLimit = xdist
+				if (xdist > dlimit) {
+					xdist = dlimit
+				}
+				gkabar_kap(x) = 0
+				gkabar_kad(x) = 0
+				if (xdist > dprox) {
+					gkabar_kad(x) = gkad*(1+xdist*dslope)
+				} else {
+					gkabar_kap(x) = gkap*(1+xdist*dslope)
+				}
+			}
+		}
+		
+		
+		
+		
+		forsec obliqueList {
+				for (x) {
+					odist = distance(x) 	// odist is the distance of each segment along the oblique branch
+					pdist_k = dlimit
+					gkabar_kap(x) = gkap*(1+pdist_k*dslope+odist*okslope)
+					gkabar_kad(x) = gkad*(1+pdist_k*dslope+odist*okslope)
+				}
+		}
+		
+
+		forsec tuftList {
+			gbar_nax = gnaSlm
+		}
+		forsec ca3List {
+			gbar_nax = gnaSr
+		}
+		soma.sec {
+			gbar_nax = gnaSoma
+		}
+		
+		soma.sec { 
+			distance()
+		}
+
+	}
+}
+

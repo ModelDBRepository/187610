@@ -1,0 +1,188 @@
+// ADD VGAT+ SYNAPSES TO MORPHOLOGY.
+
+// Preallocate objects for inhibition.
+totVgatAt = 100000
+objref nsVgatAt[totVgatAt],ncVgatAt[totVgatAt],synVgatAt[totVgatAt]
+
+// This function takes a SectionRef and a vector with surface area synapse
+// scaling and places the number of corresponding Vgat+ inhibitory synapses.
+// Note that the low index of the first placed synapse needs to be specified
+// in order to give indices to all of the generated synapse.
+//
+// $o1: SectionRef instance.  Contains the section to implement with the scaling
+// 	rule.
+// $o2: Vector instance.  Contains the scaling rule to implement.  If the
+//	density is uniform across the branch (e.g., 0.1 synapses/um2), then
+//	simply supply as 
+//		foo = new Vector(1); foo.x[0] = 0.1; $o1 = foo
+// 	Conversely, if
+// 	there is spatial variation across the branch (say, 0.1 synapses/um2 in the
+//	first third, 0.2 synapses/um2 in the second third, and 0.3 synapses/um2
+// 	in the final third), then, supply as
+//		foo = new Vector(3) ; foo.x[0] = 0.1, foo.x[1] = 0.2;
+//			foo.x[2] = 0.3 ; $o1 = foo
+// $3: numeric.  The index of the first synapse to be created and placed.
+//
+// The number of synapses added is returned.
+func addVgatInhibition() {local nDiv,runningSa,synAdd,synCur,ii,jj
+	
+	nDiv = $o2.size() // number of divisions for the compartment
+
+	synCur = $3
+	// Place synapses.
+	$o1.sec {
+		for ii=1,nDiv{
+			runningSa = 0
+			synAdd=0 
+			for(x,0){
+				if(((ii-1)/nDiv)<x_eff(x)){
+					if(x_eff(x)<(ii/nDiv+0.00000001)){
+						runningSa += area(x)
+						
+						if(int(runningSa*($o2.x[ii-1]))>(synAdd+0.00001)){
+							toAdd = int(runningSa*($o2.x[ii-1])-synAdd)
+							for jj=1,toAdd{
+								synCur = synCur + 1
+								synAdd = synAdd + 1
+								//print "\t",secname(),"\t",x,"\t",synCur-1
+								synVgatAt[synCur-1] = new inhSyn(x)
+								synVgatAt[synCur-1].vgat = 1
+								synVgatAt[synCur-1].xEff = x_eff(x)
+								nsVgatAt[synCur-1] = new NetStim(x)
+								ncVgatAt[synCur-1] = new NetCon(nsVgatAt[synCur-1],synVgatAt[synCur-1])
+							}
+						}else{
+							toAdd = 0
+						}
+						vgatAt_syns(x) = toAdd
+					}
+				}
+			}
+		}
+	}	
+
+	return synCur-$3	
+}
+
+	
+	synInd = 0 // first index to be used
+	objref curSec // rolling SectionRef to currently accessed section
+	
+	// Define tuft densities and add tuft synapses.
+	objref denVgatTuftTerm,denVgatTuftPar
+	denVgatTuftTerm = new Vector(3)
+		denVgatTuftTerm.x[0] = 0.09//0.075
+		denVgatTuftTerm.x[1] = 0.11//0.085
+		denVgatTuftTerm.x[2] = 0.135//0.1275
+	denVgatTuftPar = new Vector(3)
+		denVgatTuftPar.x[0] = 0.105
+		denVgatTuftPar.x[1] = 0.105
+		denVgatTuftPar.x[2] = 0.1
+	nVgatTuft = 0
+	
+	forsec tuftList {
+		curSec = new SectionRef()
+		if(isTerm_id){
+			numAdded = addVgatInhibition(curSec,denVgatTuftTerm,synInd)
+		}else{
+			numAdded = addVgatInhibition(curSec,denVgatTuftPar,synInd)
+		}
+		synInd+=numAdded
+		nVgatTuft+=numAdded
+	}
+	
+	// print "The total number of VGAT+ synapses in tuft is: ",nVgatTuft
+	
+	// Define oblique densities and add oblique synapses.
+	objref denVgatObl
+	denVgatObl = new Vector(3)
+		denVgatObl.x[0] = 0.04
+		denVgatObl.x[1] = 0.04
+		denVgatObl.x[2] = 0.04
+	nVgatObl = 0
+		
+	forsec obliqueList {
+		curSec = new SectionRef()
+		numAdded = addVgatInhibition(curSec,denVgatObl,synInd)
+		synInd+=numAdded
+		nVgatObl+=numAdded
+	}
+	
+	// print "The total number of VGAT+ synapses in obliques is: ",nVgatObl
+	
+	// Define apical trunk densities and add synapses.
+	// Note this includes a distance-dependent scaling factor.
+	objref denVgatPrim,denVgatPrimTemp
+	denVgatPrim = new Vector(1)
+		denVgatPrim.x[0] = 0.056
+	denVgatPrimTemp = new Vector(denVgatPrim.size()) // a rolling density with distant-dependent scaling
+	nVgatPrim = 0
+		
+	soma.sec{distance()}
+	
+	forsec primList {
+		curSec = new SectionRef()
+		theDist = distance(0.5)
+		
+		scaleFact = 1-theDist/225
+		if(scaleFact<0){scaleFact=0}
+		
+		denVgatPrimTemp.copy(denVgatPrim)
+		denVgatPrimTemp.mul(scaleFact)
+		
+		numAdded = addVgatInhibition(curSec,denVgatPrimTemp,synInd)
+		synInd+=numAdded
+		nVgatPrim+=numAdded
+	}
+	// print "The total number of VGAT+ synapses in main apical is: ",nVgatPrim
+	
+	// Add synapses to soma.  
+	objref denVgatSoma
+	denVgatSoma = new Vector(1)
+		denVgatSoma.x[0] = 0 // 0.064 is correct, but don't want somatic inhibition
+	nVgatSoma = 0
+		
+	soma.sec {
+		curSec = new SectionRef()
+		numAdded = addVgatInhibition(curSec,denVgatSoma,synInd)
+		synInd+=numAdded
+		nVgatSoma+=numAdded
+	}
+	// print "The total number of VGAT+ synapses in soma is: ",nVgatSoma
+	
+	// Add synapses to basals.
+	objref denVgatBasalPrim,denVgatBasalSec,denVgatBasalTerm
+	denVgatBasalPrim = new Vector(1)
+		denVgatBasalPrim.x[0] = 0.09
+	denVgatBasalSec = new Vector(1)
+		denVgatBasalSec.x[0] = 0.08
+	denVgatBasalTerm = new Vector(3)
+		denVgatBasalTerm.x[0] = 0.05
+		denVgatBasalTerm.x[1] = 0.05
+		denVgatBasalTerm.x[2] = 0.03
+	nVgatBasal=0
+	
+	forsec basalList {
+		curSec = new SectionRef()
+		if(isTerm_id){
+			numAdded = addVgatInhibition(curSec,denVgatBasalTerm,synInd)
+		}else{
+			if(abs(brOrd_id-1)<0.001){
+				numAdded = addVgatInhibition(curSec,denVgatBasalPrim,synInd)
+			}else{
+				if(abs(isTerm_id)){
+					numAdded = addVgatInhibition(curSec,denVgatBasalTerm,synInd)
+				}else{
+					numAdded = addVgatInhibition(curSec,denVgatBasalSec,synInd) // keep as 2ary for time being
+				}
+			}
+		}
+		synInd+=numAdded
+		nVgatBasal+=numAdded
+	}
+	// print "The total number of VGAT+ synapses in basals is: ",nVgatBasal
+	
+	
+// Note the number of synapses that were created.
+// print "The total number of VGAT+ synapses is: ",synInd
+totVgatAt = synInd-1

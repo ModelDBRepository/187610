@@ -1,0 +1,245 @@
+// THIS SCRIPT FACILITATES INTERPLAY BETWEEN ANATOMICAL DATA AND COMPUTATIONAL
+// HANDLING OF ANATOMICAL DATA.
+
+// Some of the importing procedure can be complicated by the fact that individual
+// cables (as defined within NEURON) do not give a perfect one-to-one
+// correspondence with branches; for example, a given branch (as viewed 
+// strictly by morphology) may be composed of several branches (ie, sections in 
+// NEURON) each only having a single daughter.  Need a way to construct an "effective"
+// morphology so that the statistics used for synapse placement truly reflects
+// the morphology, rather than the NEURON partitioning of the morphology.
+
+// First, for all neurites, construct an array of SectionLists that correspond
+// to effectively one branch.
+// 
+// The implementation is the following:
+// 1.  Start a given section.  Extract a subtree, and identify whether the
+// 	longest arc along the subtree is sufficiently close to the whole
+//	length of the subtree.  If this is the case, keep it.
+objref brEff[1000] // preallocate a large number
+
+maxDistDiff = 20 // distance, in microns, to allow the max path length dist
+		// to vary from the total length and still create an "effective"
+		// branch.
+numEffBr = 0 // number of effective branches.
+
+// 050815: write a script that organises all sections into a hierarchy.  This
+// is relevant for constructing the effective branches below; when interating
+// over the morphology, need to do so in a somato-centric way (ie proceeding
+// from parents to children) because the algorithm iterates down family trees,
+// and will not properly work if daughter branches are visited before parent
+// branches.
+objref orgSecList
+orgSecList = new SectionList()
+soma.sec { orgSecList.subtree() }
+
+
+// ORGANISE TUFT INTO EFFECTIVE SECTIONS.
+objref curTree,tempSecList,curSec
+bifThres = 5
+tempSecList = new SectionList() // will contain all the sections to iterate over
+tempLen = 0
+forsec orgSecList {
+	curSec = new SectionRef()
+	// Check if current section is previously added to an effective branch;
+	// if so, break.  
+	isUsed=0
+
+
+
+	for ii=1,numEffBr{
+		if(sectionRefInList(curSec,brEff[ii-1])){
+			isUsed=1
+		}
+	}
+	
+	
+	if(isUsed<0.1){
+		// proceed down parent dendrite, appending all sections until
+		// encounter a bifurcation with both branches > threshold.
+		
+		brEff[numEffBr] = new SectionList()
+		tempSecList.append()
+		numSecList = 1
+
+		
+		while(numSecList>0.1){
+			forsec tempSecList {
+				
+				// remove from section list, add to branch tree
+				curSec = new SectionRef()
+				tempSecList.remove()
+				brEff[numEffBr].append()
+				// check out outstanding tree.
+				
+				if(curSec.nchild<0.1){
+					// childless, do nothing
+				}else{
+					if(curSec.nchild<1.1){
+						// one daugheter.  add.
+						curSec.child[0] { tempSecList.append() }
+					}else{
+						// two+ children.  dont take if each have length > bifThres;
+						// otherwise, add to tree and keep going...
+						minLen = 100000
+						for nn=1,curSec.nchild(){
+							curSec.child[nn-1] {
+								tempLen = L
+							//	if(tempLen<bifThres){ tempSecList.append() }
+								if(tempLen<minLen){minLen=tempLen}
+							}
+						}
+						if(tempLen>bifThres){
+							// all daughters created longer than bifThres distance.
+							// do nothing.
+						}else{
+							minLen = 100000
+							for nn=1,curSec.nchild(){
+								curSec.child[nn-1] {
+									tempLen = L
+									tempSecList.append()
+								}
+							}
+						}
+					}
+						
+				}
+			}
+			numSecList = 0
+			forsec tempSecList { numSecList += 1 }
+		}		
+		numEffBr+=1
+	}
+}
+			
+
+//print "The number of effective branches is ",numEffBr
+
+// Implement a check to see the number of sections assigned to clusters, and
+// make sure it covers all sections.
+numInClust = 0
+numInClustExpect = 0
+for ii=1,numEffBr{
+	forsec brEff[ii-1] {
+		numInClust = numInClust + 1
+	}
+}
+forall {
+	numInClustExpect = numInClustExpect + 1
+}
+
+if(abs(numInClust-numInClustExpect)>0.1){
+	print "The number of sections in effective branches does not equal the total number of sections.  Halting."
+	stop
+}	
+
+// Implement a check to make sure that there is no overlap in the elements of clusters.
+overlapFlag=0
+for ii=1,numEffBr-1{
+	forsec brEff[ii-1] {
+		curSec = new SectionRef()
+		for jj=ii+1,numEffBr{
+			if(sectionRefInList(curSec,brEff[jj-1])){
+				overlapFlag=1
+			}
+		}
+	}
+}
+if(overlapFlag){
+	print "There is overlap in sections found across different effective branches. Halting."
+	stop
+}
+
+// Create features associated with effective branches.
+forall {
+	insert eff
+	L_eff = -1 // effective length
+	d_eff = -1 // effective distance along length
+	x_eff = -1 // effective x value
+}
+
+
+// create features associated with effective branches.  do just lengths at this
+// point, as this is how things are typically processed.
+for nn=1,numEffBr{
+	lEffKeeper = 0 // effective length
+	visitedFirst = 0 // have visited first section?
+	forsec brEff[nn-1] {
+		if(visitedFirst<0.1){
+			visitedFirst = 1
+			distance()
+			for(x,0){
+				d_eff(x) = x*L
+			}
+			lEffKeeper = L // effective branch length
+			maxDist = L
+		}else{
+			for(x,0){
+				d_eff(x) = distance(x)
+			}
+			lEffKeeper += L
+			if(distance(1)>maxDist){
+				maxDist = distance(1)
+			}
+		}
+	}
+	
+	forsec brEff[nn-1] {
+		L_eff = maxDist
+		for(x,0){
+			x_eff(x) = distance(x)/maxDist
+		}
+	}
+}
+
+//// 091715: added in printing of parameters of morphologies.
+//print "Delete this in processMorph.hoc later"
+//for nn=1,numEffBr{
+//	print 
+//	forsec brEff[nn-1] {
+//		print "\t",secname()," ",L_eff
+//	}
+//}
+
+	
+	
+// function that determines whether a given sectionlist is terminal.  By the
+// way the effective branches were created, this evaluates to whether all of
+// the daughter branches of the given sectionlist are also contained within
+// the sectionlist.
+// $o1: SectionList instance to examine.
+// OUTPUT: logical representing whether the sectionlist is termina..
+func isTermEff() {local withinList localobj tempSecKeeper,theTempSec
+	
+	// First, iterate over all sections and extract daughters.
+	tempSecKeeper = new SectionList()
+	forsec $o1 {
+		tempSecKeeper.children()
+	}
+	
+	allWithinList = 1
+	// Next, check if every child was part of the original list.
+	forsec tempSecKeeper {
+		theTempSec = new SectionRef()
+		withinList = sectionRefInList(theTempSec,$o1)
+		if(withinList<0.1){
+			allWithinList=0
+		}
+	}
+	return allWithinList
+}
+
+// assign terminal identify
+for nn=1,numEffBr {
+	forsec brEff[nn-1] {
+		isTerm_id = isTermEff(brEff[nn-1])
+	}
+}
+
+// proofread some terminal IDs that get screened:
+load_file("getBranchOrder.hoc")
+Cell[0].dend[36] {isTerm_id=1}
+Cell[0].dend[37] {isTerm_id=1}
+
+assignBranchOrder(soma,0)
+

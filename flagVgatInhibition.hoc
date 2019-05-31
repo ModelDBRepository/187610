@@ -1,0 +1,295 @@
+// ALLOCATE VGAT+ SYNAPSES AS BEING OTHER TYPES OF SYNAPSES (e.g., SST+, NPY+)
+
+// This function flags the given SectionRef synapses as being part of the given
+// genotype.
+//
+// $o1: SectionRef instance.  The section to implement the flagging.
+// $o2: Vector instance.  Contains the scaling rule to implement.  If the
+//	density is uniform across the branch (e.g., 0.1 synapses/um2), then
+//	simply supply as 
+//		foo = new Vector(1); foo.x[0] = 0.1; $o1 = foo
+// 	Conversely, if
+// 	there is spatial variation across the branch (say, 0.1 synapses/um2 in the
+//	first third, 0.2 synapses/um2 in the second third, and 0.3 synapses/um2
+// 	in the final third), then, supply as
+//		foo = new Vector(3) ; foo.x[0] = 0.1, foo.x[1] = 0.2;
+//			foo.x[2] = 0.3 ; $o1 = foo
+// $s3: strdef instance.  The genotype to flag.
+//
+// The number of synapses added is returned.
+func flagVgatInhibition() {local nDiv,iii,kk,numToConvert localobj theSa,tempToConvert
+	nDiv = $o2.size()
+	theSa = new Vector(nDiv) // track SA; eventually overwrite to # of synapses
+
+	// identify number of synapses to flag.
+	for(x,0){
+	
+		theSa.x[int(x_eff(x)*nDiv)] = theSa.x[int(x_eff(x)*nDiv)] + area(x)
+	}
+	theSa.mul($o2) // multiple SA by density.
+	theSa.floor()
+	
+	// flag corresponding synapses
+	for iii=1,nDiv{
+		numToConvert = theSa.x[iii-1]
+		tempToConvert = synIndSubset(curSec,numToConvert,-1,(iii-1)/nDiv,iii/nDiv)
+
+		for kk=1,tempToConvert.size(){
+			if(abs(strcmp($s3,"sst"))<0.0001){
+				synVgatAt[tempToConvert.x[kk-1]].sst = 1
+			}
+			if(abs(strcmp($s3,"npy"))<0.0001){
+				synVgatAt[tempToConvert.x[kk-1]].npy = 1
+			}
+			if(abs(strcmp($s3,"pv"))<0.0001){
+				synVgatAt[tempToConvert.x[kk-1]].pv = 1
+			}
+		}
+	}
+	
+	return theSa.sum()
+}
+
+// DEFINE OBJECTS AND PARAMETERS FOR FLAGGING SYNAPSES
+	// SST.
+		objref denSstTuftTerm,denSstTuftPar
+		denSstTuftTerm = new Vector(3)
+			denSstTuftTerm.x[0] = 0.0575
+			denSstTuftTerm.x[1] = 0.0675
+			denSstTuftTerm.x[2] = 0.1075
+		denSstTuftPar = new Vector(3)
+			denSstTuftPar.x[0] = 0.045
+			denSstTuftPar.x[1] = 0.055
+			denSstTuftPar.x[2] = 0.05
+
+	// NPY.
+		objref denNpyObl,denNpyOblTemp
+		denNpyObl = new Vector(3)
+			denNpyObl.x[0] = 0.022 //0.022
+			denNpyObl.x[1] = 0.02 // 0.014
+			denNpyObl.x[2] = 0.01
+		denNpyOblTemp = new Vector(denNpyObl.size())
+		denNpyOblBase = 0//0.025 // base amount to be added everywhere after scaling
+		
+		objref denNpyTrunk,denNpyTrunkTemp
+		denNpyTrunk = new Vector(1)
+			denNpyTrunk.x[0] = 0.0425
+		denNpyTrunkTemp = new Vector(denNpyTrunk.size())
+		
+		objref denNpySoma
+		denNpySoma = new Vector(1)
+			denNpySoma.x[0] = 0 // =0, as do not want somatic inhibition
+		
+		objref denNpyBasalPrim,denNpyBasalSec,denNpyBasalTerm
+		denNpyBasalPrim = new Vector(1)
+			denNpyBasalPrim.x[0] = 0.04
+		denNpyBasalSec = new Vector(1)
+			denNpyBasalSec.x[0] = 0.05
+		denNpyBasalTerm = new Vector(1)
+			denNpyBasalTerm.x[0] = 0.020
+		
+	// PV.
+		objref denPvObl
+		denPvObl = new Vector(1)
+			denPvObl.x[0] = 0.008 // changed from 0.004 per Erik's request, 022415, to have ~15 synapses
+		
+		objref denPvSoma
+		denPvSoma = new Vector(1)
+			denPvSoma.x[0] = 0.032
+			
+		objref denPvBasalPrim,denPvBasalSec,denPvBasalTerm
+		denPvBasalPrim = new Vector(1)
+			denPvBasalPrim.x[0] = 0.05
+		denPvBasalSec = new Vector(1)
+			denPvBasalSec.x[0] = 0.02
+		denPvBasalTerm = new Vector(1)
+			denPvBasalTerm.x[0] = 0.001	
+
+// ADD IN SYNAPSES.
+// Flag genotypes according to the above defined rules.  Wrapped in a proc call
+// so that can be re-called as needed, which will redraw synapses from the 
+// distributions (stochasticity present in the synIndSubset() call in 
+// flagVgatInhibition() ).
+proc seedGenotypes(){local ii,mm,theX
+
+	// Clear previous identities.
+	for ii=0,totVgatAt-1{
+		synVgatAt[ii].sst = 0
+		synVgatAt[ii].npy = 0
+		synVgatAt[ii].pv = 0
+	}
+
+	// SST /////////////////////////////////////////////////////////////////
+
+	// Add SST synapses to tuft.
+		totSstTuft = 0
+		
+		forsec tuftList {
+			curSec = new SectionRef()
+			if(isTerm_id){
+				numFlagged = flagVgatInhibition(curSec,denSstTuftTerm,"sst")
+			}else{
+				numFlagged = flagVgatInhibition(curSec,denSstTuftPar,"sst")
+			}
+			totSstTuft += numFlagged
+			
+		}
+		
+		// print "The total number of SST synapses in tuft is ",totSstTuft
+	
+	// NPY /////////////////////////////////////////////////////////////////	
+	
+	// Add synapses to oblique.
+	
+		
+		totNpyObl = 0
+		forsec obliqueList {
+			curSec = new SectionRef()
+			
+			theOblDist = mainbif_dists
+			scaleFact = (200-theOblDist)/66		
+			if(scaleFact<0){scaleFact=0}
+			
+			denNpyOblTemp.copy(denNpyObl)
+			denNpyOblTemp.add(denNpyOblBase)
+			denNpyOblTemp.mul(scaleFact)
+			
+			numFlagged = flagVgatInhibition(curSec,denNpyOblTemp,"npy")
+			
+			totNpyObl+=numFlagged
+		}
+		
+		// print "The total number of NPY synapses in obliques is ",totNpyObl
+	
+	// Add in synapses to trunk.
+		
+		
+		
+		totNpyTrunk = 0
+			
+		soma.sec {distance()}
+		forsec primList {
+			curSec = new SectionRef()
+		
+			theDist = distance(0.5)
+			scaleFact = scaleFact = 1-theDist/250
+			if(scaleFact<0){scaleFact=0}
+			
+			denNpyTrunkTemp.copy(denNpyTrunk)
+			denNpyTrunkTemp.mul(scaleFact)
+			
+			numFlagged = flagVgatInhibition(curSec,denNpyTrunkTemp,"npy")
+		
+			totNpyTrunk += numFlagged
+		}
+		// print "The total number of NPY synapses in trunk is ",totNpyTrunk
+		
+	// Add synapses to soma.
+		
+		totNpySoma=0
+		soma.sec {
+			curSec = new SectionRef()
+			numFlagged = flagVgatInhibition(curSec,denNpySoma,"npy")
+			totNpySoma+=numFlagged
+		}
+		// print "The total number of NPY synapses at soma is ",totNpySoma
+		
+	// Add synapses to basals.
+		totNpyBasal = 0
+		forsec basalList {
+			curSec = new SectionRef()
+			if(isTerm_id){
+				numFlagged = flagVgatInhibition(curSec,denNpyBasalTerm,"npy")
+			}else{
+				if(abs(brOrd_id-1)<0.001){
+					numFlagged = flagVgatInhibition(curSec,denNpyBasalPrim,"npy")
+				}else{
+					if(abs(brOrd_id-2)<0.001){
+						numFlagged = flagVgatInhibition(curSec,denNpyBasalSec,"npy")
+					}else{
+						numFlagged = flagVgatInhibition(curSec,denNpyBasalSec,"npy") // keep as 2ary for right now...
+					}
+				}
+			}
+			totNpyBasal += numFlagged
+		}
+		// print "The total number of NPY synapses in basal is ",totNpyBasal
+		
+
+	// PV //////////////////////////////////////////////////////////////////
+		
+	// Add synapses to oblique.
+		totPvObl = 0
+		
+		forsec obliqueList {
+			curSec = new SectionRef()
+			numFlagged = flagVgatInhibition(curSec,denPvObl,"pv")
+			totPvObl+=numFlagged
+		}
+		
+		// print "The total number of PV synapses in obliques is ",totPvObl
+	
+	// Add synapses to soma.
+		totPvSoma=0
+		
+		soma.sec {
+			curSec = new SectionRef()
+			numFlagged = flagVgatInhibition(curSec,denPvSoma,"pv")
+			totPvSoma+=numFlagged
+		}
+		// print "The total number of PV synapses at soma is ",totPvSoma
+		
+
+	// Add synapses to basals.
+		
+		totPvBasal = 0
+		forsec basalList {
+
+			curSec = new SectionRef()
+			if(isTerm_id){
+				numFlagged = flagVgatInhibition(curSec,denPvBasalTerm,"pv")
+			}else{
+				if(abs(brOrd_id-1)<0.001){
+					numFlagged = flagVgatInhibition(curSec,denPvBasalPrim,"pv")
+				}else{
+					if(abs(brOrd_id-2)<0.001){
+						numFlagged = flagVgatInhibition(curSec,denPvBasalSec,"pv")
+					}else{
+						numFlagged = flagVgatInhibition(curSec,denPvBasalSec,"pv") // keep as 2ary for right now...
+					}
+				}
+			}
+			totPvBasal += numFlagged
+		}
+		// print "The total number of PV synapses in basal is ",totPvBasal
+
+	// Update values storing number of each genotype at each synapse.
+	forall {
+		for (x,0) {
+			sstAt_syns(x)=0
+			npyAt_syns(x)=0
+			pvAt_syns(x)=0
+		}
+	}
+	
+	for mm=1,totVgatAt{
+		synVgatAt[mm-1].get_loc() {
+			theX = synVgatAt[mm-1].get_loc()
+			
+		
+			
+			if(synVgatAt[mm-1].sst==1){
+				sstAt_syns(theX) = sstAt_syns(theX)+1		
+			}
+			if(synVgatAt[mm-1].npy==1){
+				npyAt_syns(theX) = npyAt_syns(theX)+1
+			}
+			if(synVgatAt[mm-1].pv==1){
+				pvAt_syns(theX) = pvAt_syns(theX)+1
+			}
+			pop_section()
+		}
+		pop_section()
+	}
+}
+seedGenotypes() // add in inhibition

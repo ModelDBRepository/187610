@@ -1,0 +1,64 @@
+////////////////////////////////////////////////////////////////////////////////
+//
+// Mark Cembrowski
+// Janelia Research Campus
+// Jan 11, 2016
+//
+// Correspondence: cembrowskim@janelia.hhmi.org
+//
+// The following scripts are designed to allow easy simulation of both
+// inhibition and excitation onto a model CA1 PC, with the spatial distribution 
+// of inputs reflecting subcellular, cell-type-specific distributions of 
+// inhibition as determined by array tomography.
+//
+////////////////////////////////////////////////////////////////////////////////
+
+// LOAD GUI.
+{
+	load_file("nrngui.hoc")
+}
+
+// LOAD MORPHOLOGY.
+{
+	load_file("loadMorph.hoc")
+	load_file("resetNSeg.hoc")
+}
+
+// ADJUST MORPHOLOGY AND ANNOTATION.
+{
+	load_file("proofreadMorph.hoc") // proofread at-derived morph
+	load_file("idMorph.hoc") // create section lists for gross compartments
+	load_file("processMorph.hoc") // annotate how NEURON recognises sections
+}
+
+// IMPLEMENT INTRINSIC CHANNELS.
+{
+	load_file("addChannels.hoc")
+}
+
+// ADJUST NUMERICAL ASPECTS OF SIMULATION.
+{
+	load_file("initializationAndRun.hoc")
+} 
+
+// PLACE ALL INHIBITORY SYNAPSES (ie, all VGAT+ SYNAPSES) AND THEN ASSIGN THEM
+// AS OTHER GENOTYPES (SST, PV) AS DETERMINED BY ARRAY TOMOGRAPHY 
+// DISTRIBUTIONS.
+{
+	load_file("addVgatInhibition.hoc")
+	load_file("synHelperScripts.hoc") // scripts retrieving synapse information
+	load_file("flagVgatInhibition.hoc")
+	load_file("inhibitionBiophysics.hoc") // assign inhibition properties
+}				
+
+// PLACE ALL EXCITATORY SYNAPSES.
+{
+	load_file("addExcitation.hoc")
+}
+
+// PROVIDE SCRIPTS THAT ALLOW FOR EASY MANIPULATION OF EXCITATION AND
+// INHIBITION.
+{
+	load_file("activateInhibition.hoc") // fxn toggling inhibition activation
+	load_file("activateExcitation.hoc") // fxn toggling excitation activation
+}

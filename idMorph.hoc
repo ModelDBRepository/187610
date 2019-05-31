@@ -1,0 +1,235 @@
+// THIS SCRIPT ASSIGNS ANNOTATION TO SPECIFIC SUBCELLULAR COMPARTMENTS.
+
+forall {
+	
+	insert id
+	
+	for (x) {
+		isTerm_id(x) = 0
+		isTuft_id(x) = 0
+		isObl_id(x) = 0
+		isBas_id(x) = 0
+		isPrim_id(x) = 0
+	}
+}
+
+objref soma
+objref basalList,obliqueList,primList,apicalList,tuftList,dendList,cellList,ca3List
+	
+apicalList = new SectionList() // apical list
+basalList = new SectionList() // basal list
+obliqueList = new SectionList() // oblique list
+primList = new SectionList() // primary apical list
+tuftList = new SectionList()
+dendList = new SectionList() // list of all dendrites
+cellList = new SectionList()
+ca3List = new SectionList() // list of places that CA3 cells would contact CA1 (SO + SR)
+	
+Cell[0].dend[72] {soma = new SectionRef()}
+
+// Populate apical list.
+Cell[0].dend[11] { apicalList.subtree() }
+
+// Populate primary apical list.
+Cell[0].dend[11] { primList.append() }
+Cell[0].dend[74] { primList.append() }
+Cell[0].dend[75] { primList.append() }
+Cell[0].dend[76] { primList.append() }
+Cell[0].dend[77] { primList.append() } // right before twin bifurcation
+Cell[0].dend[78] { primList.append() } // left twin apical
+Cell[0].dend[79] { primList.append() }
+Cell[0].dend[80] { primList.append() }
+Cell[0].dend[82] { primList.append() }
+Cell[0].dend[83] { primList.append() }
+Cell[0].dend[84] { primList.append() }
+Cell[0].dend[85] { primList.append() }
+Cell[0].dend[86] { primList.append() }
+Cell[0].dend[151] { primList.append() } // right twin apical
+Cell[0].dend[154] { primList.append() }
+Cell[0].dend[155] { primList.append() }
+Cell[0].dend[157] { primList.append() }
+Cell[0].dend[160] { primList.append() }
+Cell[0].dend[161] { primList.append() }
+
+// By eye, these were the beginning of sections that define the tuft.
+Cell[0].dend[87] { tuftList.subtree() }
+Cell[0].dend[162] { tuftList.subtree() }
+Cell[0].dend[163] { tuftList.subtree() }
+
+// Populate obliques.  By previous definitions, this is simply the
+// whole apical dendrite less the tuft and the primary apical.
+forsec apicalList { obliqueList.append() }
+forsec tuftList { obliqueList.remove() }
+forsec primList { obliqueList.remove() }
+
+
+	
+// Populate basals.  By previous definitions, this is simply the
+// whole tree less the apical dendrite and the soma.
+forall { basalList.append() }
+forsec apicalList { basalList.remove() }
+soma.sec { basalList.remove () }
+
+
+// Populate all dendrites.  This is everything minus the soma.
+forall { dendList.append() }
+soma.sec { dendList.remove() }
+
+// Populate the whole cell.  This is everything.
+forall { cellList.append() }
+
+// Populate sections which would contact CA3 axons.
+forsec basalList {ca3List.append()}
+forsec primList {ca3List.append()}
+forsec obliqueList {ca3List.append()}
+soma.sec {ca3List.append()}
+
+// Declare a function that looks at whether a given SectionRef instance 
+// (argument 1) is found in a given SectionList (argument 2).
+// $o1: SectionRef instance to match.
+// $o2: SectionList instance to search over.
+// Returns logical of whether section is in list.
+func sectionRefInList() {local isInList
+	isInList = 0
+	
+	strdef tempSecName
+	
+	$o1.sec { tempSecName = secname() }
+	
+	forsec $o2 {
+		if(abs(strcmp(secname(),tempSecName))<(1e-5)){
+			isInList=1
+		}
+	}
+
+	return isInList
+}
+
+objref theSec
+forall {
+	theSec = new SectionRef()
+	for (x){
+		isTuft_id(x) = sectionRefInList(theSec,tuftList)
+		isPrim_id(x) = sectionRefInList(theSec,primList)
+		isObl_id(x) = sectionRefInList(theSec,obliqueList)
+		isBas_id(x) = sectionRefInList(theSec,basalList)
+		brOrd_id(x) = -1
+	}
+}
+
+// Assign distances from bifurcation of apical trunk.  Note this is used solely
+// for obliques, so all other locations get assigned a -1 value.
+
+forall {
+	insert dists
+	
+}
+
+// Generate a function that point out how far something is from main apical.
+// INPUT: a SectionRef instance that refers to an oblique branch.
+// OUTPUT: the distance from the initial bifurcation of this branch from the
+//	primary apical branch.  [ note : to be consistent with AT data, this 
+//	may not be the distance of the branch itself, but rather from a
+//	parent branch that stems directly off of the primary apical ]
+func oblDist(){localobj theSec,tempParSec
+	theSec = $o1 // a SectionRef instance
+	
+	// Traverse down branch until hit parent branch that stems directly
+	// off the main apical.
+	
+	// Identify parent.
+	strdef strPar
+	while(1){
+		theSec.parent{	
+			strPar = secname()	
+		}
+		
+		inList = 0
+		
+		// Is parent in the obliques list?
+		forsec obliqueList {
+			curDist = abs(strcmp(secname(),strPar))
+			if(curDist<0.0001){
+				inList = 1
+				tempParSec = new SectionRef()
+			}
+		}
+		if(inList){
+			// Repeat; update parent section.
+			tempParSec.sec { theSec = new SectionRef() }
+		}else{
+			break
+		}
+	}
+	
+	// Get the distance from this parent branch to the soma.
+	soma.sec {
+		distance()
+	}
+	
+	theSec.sec {
+		theDist = distance(0)
+	}
+			
+	return theDist
+}
+
+// Generate a function that point out how far along the main apical a given
+// section (with associated x value) is.
+// INPUT: a SectionRef instance that refers to an main apical branch, and a 
+//	variable (0<= , <=1) corresponding to the x value.
+// OUTPUT: the distance of the _middle_ of the section from the soma, divided
+//	by the distance of the total main apical dendrite
+func primDist(){local tuftDist,somaDist,outDist,theX localobj theSec,allTuftDists
+	theSec = $o1 // a SectionRef instance
+	theX = $2
+	allTuftDists = new Vector()
+	
+	// Calculate minimum distance from tuft to selected section.
+	theSec.sec { distance() }
+	forsec tuftList {
+		tuftDist = distance(0)
+		allTuftDists.append(tuftDist)
+	}
+	tuftDist = allTuftDists.min() 
+	
+	// Calculate distance from selected section to soma.
+	soma.sec { distance() }
+	theSec.sec { somaDist = distance(theX) }
+
+	outDist = somaDist/(somaDist+tuftDist)	
+	return outDist
+}
+
+// Assign main bifurcation distances to obliques, as well as normalised
+// primary apical distances.
+forall {
+	for(x) {
+		theSec = new SectionRef()
+		
+		// Main bifurcation distance.
+		if(sectionRefInList(theSec,obliqueList)){
+			mainbif_dists = oblDist(theSec)
+		}else{
+			mainbif_dists = -1
+		}
+		
+		// Norm prim apical distance.
+		if(sectionRefInList(theSec,primList)){
+			normprim_dists(x) = primDist(theSec,x)
+		}else{
+			normprim_dists = -1
+		}
+	}
+}
+
+forall {
+	insert syns
+	npyAt_syns = 0
+	npyUnif_syns = 0
+	sstAt_syns = 0
+	sstUnif_syns = 0
+	vlsAt_syns = 0
+	exc_syns = 0
+}
+

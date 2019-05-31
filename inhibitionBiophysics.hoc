@@ -1,0 +1,47 @@
+// THIS SCRIPT ASSIGNS THE PROPERTIES OF INHIBITORY SYNAPSES.
+
+for ii=1,totVgatAt {
+
+	// detect location of synapse and assign properties accordingly.
+	{
+		theX = synVgatAt[ii-1].get_loc()
+		
+		// increment corresponding tracker for synapses
+		if(synVgatAt[ii-1].sst==1){
+			sstAt_syns(theX) = sstAt_syns(theX) + 1
+		}
+		if(synVgatAt[ii-1].npy==1){
+			npyAt_syns(theX) = npyAt_syns(theX) + 1
+		}
+		
+		// assign synapse properties
+		curSec = new SectionRef()
+		if(isTuft_id){
+			synVgatAt[ii-1].tau1= sstTau1 
+			synVgatAt[ii-1].tau2 = sstTau2
+			synVgatAt[ii-1].e = inhRev
+			
+			
+			nsVgatAt[ii-1].interval = 0
+			nsVgatAt[ii-1].number = 1
+			nsVgatAt[ii-1].start = 5
+			nsVgatAt[ii-1].noise = 0
+			ncVgatAt[ii-1].weight = sstWeight
+			ncVgatAt[ii-1].delay = 0
+		}
+		if(isObl_id){
+			synVgatAt[ii-1].tau1= npyTau1
+			synVgatAt[ii-1].tau2 = npyTau2
+			synVgatAt[ii-1].e = inhRev
+			
+			nsVgatAt[ii-1].interval = 0
+			nsVgatAt[ii-1].number = 1
+			nsVgatAt[ii-1].start = 5
+			nsVgatAt[ii-1].noise = 0
+			ncVgatAt[ii-1].weight = npyWeight
+			ncVgatAt[ii-1].delay = 0
+		}
+		
+		pop_section()
+	}
+}

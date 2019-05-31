@@ -1,0 +1,448 @@
+// THESE SCRIPTS DO A COMBINATION OF AUTOMATED AND MANUAL EDITING TO THE 
+// MORPHOLOGIES, AS OBTAINED FROM ARRAY TOMOGRAPHY.
+
+// A function that flips the X,Y,Z coordinates of a given section, effectively
+// reversing the x values of the branch.
+// $o1: SectionRef instance to operate on.
+// OUTPUT: the x values of the given section are reversed.
+proc flipX() {local theNSeg,segLow,segHigh,ii localobj xVals,yVals,zVals,dVals
+
+	// Count number of segments; store values.
+	theNSeg = 0
+
+	xVals = new Vector()
+	yVals = new Vector()
+	zVals = new Vector()
+	dVals = new Vector()
+	$o1.sec {
+		for ii=0,n3d()-1 {
+			xVals.append(x3d(theNSeg))
+			yVals.append(y3d(theNSeg))
+			zVals.append(z3d(theNSeg))
+			dVals.append(diam3d(theNSeg))
+			theNSeg += 1
+		}
+	}
+	
+
+	// Reverse X, Y, and Z values associated with each segment.
+	segLow = 0
+	segHigh = theNSeg - 1
+	$o1.sec {
+		for ii=0,n3d()-1 {
+			pt3dchange(segHigh,xVals.x[segLow],yVals.x[segLow],zVals.x[segLow],dVals.x[segLow])
+			segLow+=1
+			segHigh-=1
+		}
+	}
+}
+
+// A function that operates on a given section by disconnecting it, flipping it
+// (if needed), and then reconnecting it to a new parent branch.  This is used
+// for correcting issues associated with automated reconstructions.
+// INPUT:
+// $o1: SectionRef instance to operate on.
+// $2: variable.  Logic gate to flip the X values of the dendrite. [ no flip = 0 ; flip = 1 ]
+// $o3: SectionRef instance to append the operated section to.
+// $4: variable.  Optional.  Connect the daugether dendrite somewhere other
+//	than the terminal (ie x=1) of the parent dendrite?  [ default = 1 ; ie
+// 	the daugheter is connected to the terminus ]
+proc modConnect() {local xCon
+	// disconnect section
+	$o1.sec { disconnect() }
+	
+	// flip, if selected
+	if($2){	flipX($o1) }
+	
+	if(numarg()>3.1){
+		xCon = $4
+	}else{
+		xCon = 1
+	}
+		
+	
+	// connect to parent
+	$o3.sec { connect $o1.sec(0),xCon }
+}
+
+// A function that does modConnect, but allows the call to be done in one
+// line.  This is done just for parsimony of code.
+// $1: variable corresponding to SectionRef index to operate on.
+// $2: variable corresponding to SectionRef index to add on operated section.
+// $3: variable.  Logic gate to flip the X values of the dendrite. [ no flip = 0 ; flip = 1 ]
+// $4: variable.  Optional.  Connect the daugether dendrite somewhere other
+//	than the terminal (ie x=1) of the parent dendrite?  [ default = 1 ; ie
+// 	the daugheter is connected to the terminus ]
+proc quickConnect() {local conX localobj dendDau,dendPar
+	Cell[0].dend[$1] { dendDau = new SectionRef() }
+	Cell[0].dend[$2] { dendPar = new SectionRef() }
+	
+	if(numarg()>3.1){
+		conX = $4
+	}else{
+		conX = 1
+	}
+	
+	modConnect(dendDau,$3,dendPar,conX)
+}
+
+// This function clears the properties of a given neurite.  It is used as a 
+// helper function for the splitSection() call, which relies on a preexisting
+// section to write to the newly created section.
+// $1: index of section to clear.
+proc clearSection(){
+	Cell[0].dend[$1] {
+		disconnect()
+		for ii=0,n3d()-1{
+			pt3dremove(0)
+		}
+	}
+}
+
+// A function that turns an existing part of a branch into a new branch.
+// This is used for inserting bifurcations into sections where they are not
+// present in the original morphology.  The topology is then adjusted to connect
+// this new branch to the old branch, conserving the 0 -> 1 direction of the
+// original neurite.
+// 
+// $1: variable.  Index of section to be split (e.g., "100" for Cell[0].dend[100])
+// $2: variable.  Replace terminal part of neurite (ie, start at point n3d()-1 and proceed
+//	towards parent?)  [ if = 0, start at point 0; if = 1, start at point n3d()-1 ]
+// $3: variable.  Number of segments to switch over.
+// $4: variable.  Index of new neurite to be created.  Should be an index of
+//	a neurite that exists but would normally be deleted as part of 
+//	proofreading; see note in body of code before.
+proc splitSection(){ local ii,curSeg,xx,yy,zz,dd localobj newNeur
+	// Clear the properties of the neurite to write.
+	clearSection($4)
+
+	// Identify index to be assigned to new neurite.  This was previously
+	// done automatically, but there are issues associated with create 
+	// calls within a function that make this annoying to implement.
+	// Thus, I've overwritten this, requiring the user to write new
+	// properties to a preexisting section.  This preexisting section
+	// would normally be one that is delete by proofreading, but instead
+	// gets coopted to create this new neurite.
+	ii = $4
+	
+	Cell[0].dend[ii] { newNeur = new SectionRef() }
+	
+	// Write geometry to new section, taken from old section.
+
+	ii=0
+	while(ii<($3-0.1)){
+		
+		// Record point to transfer and delete.
+		Cell[0].dend[$1] {
+		
+			if($2>0.1){
+				curSeg = n3d()-1
+			}else{
+				curSeg = 0
+			}
+			
+			xx = x3d(curSeg)
+			yy = y3d(curSeg)
+			zz = z3d(curSeg)
+			dd = diam3d(curSeg)
+			
+			pt3dremove(curSeg)
+		}
+		
+		newNeur.sec {
+			if($2>0.1){
+				// Inserting in 1 -> 0 direction.
+				pt3dinsert(0,xx,yy,zz,dd)
+			}else{
+				// Inserting in 0 -> 1 direction.
+				pt3dinsert(n3d(),xx,yy,zz,dd)
+			}
+		}
+		
+		ii+=1
+	}
+	
+	// Assign the number of segments.
+	Cell[0].dend[$1] {
+		ns=int(L/segL+0.5)
+		if (ns==0) {
+		     ns=1
+		}
+		if ((ns-int(ns/2)*2)==0) {
+		     ns=ns+1
+		}
+		nseg = ns
+        }  
+	
+	newNeur.sec { 
+		ns=int(L/segL+0.5)
+		if (ns==0) {
+		     ns=1
+		}
+		if ((ns-int(ns/2)*2)==0) {
+		     ns=ns+1
+		}
+		nseg = ns
+        }    
+        
+        // Connect.
+        if ($2>0.1){
+        	// Inserting in 1 -> 0 direction.
+        	quickConnect($4,$1,0)
+        }else{
+        	// Inserting in 0 -> 1 direction.
+        	quickConnect($1,$4,0)
+        }
+        
+}
+
+// The given (parent) section "absorbs" its daughter section, in that 
+// it receives all 3D points and connections of the daughter neurite.  The
+// daughter neurite is then deleted.  This is designed to take neurites that
+// are unbifurcated (when looking at morphology) but broken up into seperate
+// sections (within NEURON) and clean things up so that the whole unbroken
+// neurite can be referenced by one section.
+//
+// The absorbing only occurs if the parent neurite has a single daughter which
+// emerges from the terminus.
+// 
+// $1: variable.  Index of parent neurite; will do the absorbing.
+objref gdSR[2] // needs to be declared outside of proc because array
+proc absorbSection(){local nGd,nD,bD,ii,xx,yy,zz,dd,nDel,dL,pL,newX localobj gdX,dSR,pSR
+
+	objref gdSR[2] // reset the SectionRefs to granddaughters.
+	
+	// Initially, determine whether the section associated with the given
+	// index is a good candidate to absorb its daughther.  This requires
+	// 1) the indexed neurite to have only one daughter, and 
+	// 2) the daughter must stem from the terminal end of the parent.
+	// Validate this.
+	Cell[0].dend[$1] {
+		pSR = new SectionRef()
+		nD = pSR.nchild()
+		if(abs(nD-1)>0.001){
+			// Break if daughter number is not equal to one.
+			pop_section()
+			return
+		}else{
+			pSR.child[0] {
+				 bD = parent_connection()
+				 if(abs(bD-1)>0.001){
+				 	// Break if bifurcation not at terminus.
+				 	pop_section()
+				 	return
+				 }else{
+				 	// Assign daughter section ref.
+				 	dSR = new SectionRef()
+				 }
+			}
+		}
+	}
+				 	
+	// Store the locations of granddaughters to be reconnections.
+	dSR.sec {
+		nGd = dSR.nchild()
+		dL = L // length of daughter; used for converting x values to connection location
+	}
+
+	gdX = new Vector(nGd) // store x values of granddaughter branches
+	dSR.sec {
+		for ii=1,nGd {
+			
+			gdX.x[ii-1] = parent_connection()
+			gdSR[ii-1] = new SectionRef()
+		}
+	}
+
+	// Disconnect granddaughters; will be readded to parent.
+	dSR.sec {
+		for ii=1,nGd {
+			dSR.child[nGd-ii] {
+				// iterate backwards to disconnect without
+				// interfering with loop
+				disconnect()
+			}
+		}
+	}
+
+	// Disconnect daughter and record number of points.
+	dSR.sec { 
+		disconnect()
+		nDel = n3d()
+	}
+
+	// Move 3D properties from daughter to parent.
+	for ii=1,nDel {
+		dSR.sec {
+			// remove zero indices only because loop updates zero index
+			// every iteration.
+			xx = x3d(0)
+			yy = y3d(0)
+			zz = z3d(0)
+			dd = diam3d(0)
+			
+			pt3dremove(0)
+		}
+		
+		Cell[0].dend[$1] {
+			// connect to 1 end of parent neurite.
+			pt3dinsert(n3d(),xx,yy,zz,dd)
+		}
+	}
+
+	// Delete daughter.
+	dSR.sec { delete_section() }
+
+	// Reconnect granddaughters.
+	Cell[0].dend[$1] { pL = L } // need length of parent for rescaling
+	for ii=1,nGd {
+		gdSR[ii-1].sec {
+			newX = gdX.x[ii-1]
+			
+			// Convert previous x value to new x value, adjusted
+			// for the branch rescaling.
+			if(newX<0.9999){
+				// Rescale only if connection not at terminal
+				// part of neurite.
+				newX = (newX*dL + pL) / (dL + pL)
+			}
+		}
+		Cell[0].dend[$1] {
+			connect gdSR[ii-1].sec (0),newX
+		}
+	}
+	
+	// Assign the number of segments.
+	Cell[0].dend[$1] {
+		ns=int(L/segL+0.5)
+		if (ns==0) {
+		     ns=1
+		}
+		if ((ns-int(ns/2)*2)==0) {
+		     ns=ns+1
+		}
+		nseg = ns
+        } 
+}
+
+
+// This procedure takes two neurites (parent and child), flips the orientation
+// of the child dendrite, and reaffixes it to the parent dendrite.
+// $1: index of parent dendrite
+// $2: index of daughter dendrite.
+proc disFlipJoin(){local ii localobj parSec,dauSec
+	Cell[0].dend[$1] { parSec = new SectionRef() }
+	Cell[0].dend[$2] { dauSec = new SectionRef() }
+	
+	// detect whether multiple daughters exist
+	if(dauSec.nchild>1.1){
+		print "NOTE: multiple daughters; print out secnames:"
+		for ii=0,dauSec.nchild()-1{
+			dauSec.child[ii] { print "\t",secname() }
+		}
+	}
+	
+	parSec.sec { disconnect() }
+	//flipX(dauSec)
+	flipX(parSec)
+	
+	parSec.sec {connect dauSec.sec(0),1}
+}
+
+// Do morphology-specific cleanup.
+		
+absorbSection(107)
+absorbSection(110) // does nothing at this time, as has a small child branch in addition to main "bifurcation"
+			
+// delete superfluous sections
+//Cell[0].dend[0] {delete_section()} // Normally would delete this, but this now holds the terminal part of dend[190]; see splitSection call
+//Cell[0].dend[11] {delete_section()} // Normally would delete this, but this now holds the terminal part of dend[72]; see splitSection call
+Cell[0].dend[191] {delete_section()}
+Cell[0].dend[47] {delete_section()}
+Cell[0].dend[48] {delete_section()}
+Cell[0].dend[49] {delete_section()}
+Cell[0].dend[51] {delete_section()}
+Cell[0].dend[20] {delete_section()}
+Cell[0].dend[50] {delete_section()}
+Cell[0].dend[140] {delete_section()}
+Cell[0].dend[168] {delete_section()}
+
+// Break up a basal dendrite that is unbroken at a bifurcation where it should
+// break.
+// Split up branch 190.
+splitSection(190,1,141,0)
+
+// Split up branch 72 (soma) which has some of the apical dendrite as part
+// of the annotated section.
+splitSection(72,1,8,11)
+quickConnect(11,72,0)
+quickConnect(142,11,0)
+quickConnect(73,11,0)
+	
+// disconnect somatic section so that it can be parent.
+Cell[0].dend[72] {disconnect()}
+
+// modify connections and orientations
+quickConnect(190,72,0,0)
+quickConnect(8,190,1)
+quickConnect(9,7,0)
+quickConnect(7,8,1)
+quickConnect(4,7,1)
+quickConnect(5,4,0)
+quickConnect(3,4,1)
+quickConnect(2,3,0)
+quickConnect(6,2,0)
+quickConnect(1,3,0)
+quickConnect(71,72,1,0)
+quickConnect(53,71,0)
+quickConnect(27,71,1)
+quickConnect(26,27,0) 
+quickConnect(25,27,1) 
+quickConnect(23,25,0) 
+quickConnect(22,25,1) 
+quickConnect(21,22,0)
+quickConnect(24,21,0)
+
+quickConnect(18,22,1) 
+quickConnect(17,18,1) 
+quickConnect(19,17,0)
+quickConnect(16,17,1)
+
+
+quickConnect(13,16,1) 
+quickConnect(12,13,0) 
+quickConnect(15,12,0)
+quickConnect(14,16,0)
+	
+Cell[0].dend[190] {
+	for ii=0,3{
+		pt3dremove(0) // will always be = 0, as removing as we go..
+	}
+}
+
+Cell[0].dend[28] {
+	for ii=0,3{
+		pt3dremove(0) // will always be = 0, as removing as we go..
+	}
+}
+
+
+
+// deleting a section, and adding the daughters to the new soma.
+quickConnect(27,72,0,0)
+quickConnect(53,72,0,0)
+Cell[0].dend[71] {delete_section()}
+
+Cell[0].dend[72] {
+	pt3dinsert(0,199,141,4.7,12)
+	pt3dinsert(0,201,135,4.9,4)
+}
+
+Cell[0].dend[194] {
+	for ii=0,21{
+		pt3dremove(0)
+	}
+}
+quickConnect(194,70,0)
+quickConnect(195,70,0)
+Cell[0].dend[193] { delete_section() }

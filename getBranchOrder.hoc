@@ -1,0 +1,110 @@
+// Assign orders to a given branch.  This is implemented in the following way:
+// 1) give a seed section that will receive a given order; then,
+// 2) all other branches in the same effective branch will be given the same
+// 	order ;
+// 3) all children of the effective branch will receive the next order
+//
+// Steps 2 and 3 repeat until all effective child branches of the assigned
+// branch are given an order.
+// INPUT:
+// $o1: SectionRef instance, corresponding to the section to order.
+// $o2: [optional] variable.  First order value to assign (default = 1).  This
+//	allows flexibility to call the soma as being order "0".
+// OUTPUT:
+// The value brOrd_id is assigned for all daughters of the given section.
+strdef secToMatch
+proc assignBranchOrder(){local nn,oo,brN,curOrd,numsSecs localobj curSecs,nextSecs,usedSecs,tempSec,theHits
+	// Identify the associated effective branch.
+	$o1.sec {
+		secToMatch = secname()
+	}
+	
+	for nn=1,numEffBr{
+		forsec brEff[nn-1]{
+			if(abs(strcmp(secToMatch,secname()))<0.0001){
+				brN = nn-1
+			}
+		}
+	}
+	
+	
+	// Assign all branches in effective branch to be the sections to
+	// iterate over.
+	curSecs = new SectionList()
+	nextSecs = new SectionList()
+	numSecs = 0
+	forsec brEff[brN] {
+		nextSecs.append()
+		numSecs+=1
+	}
+	
+	// Assign first order.
+	if(numarg()>1.1){
+		curOrd = $2
+	}else{
+		curOrd = 1
+	}
+		
+	// Iterative assign orders.
+	usedSecs = new SectionList()
+
+	while(numSecs>0.1){
+		
+		curSecs = new SectionList()
+		// Add the effective branch associated with each branch.  
+		// Populate curSecs; nextSecs will then be reset.
+		theHits = new Vector()
+		forsec nextSecs {
+			secToMatch = secname()
+			for nn=1,numEffBr{
+				forsec brEff[nn-1]{
+					gotHit = 0
+					if(abs(strcmp(secToMatch,secname()))<0.0001){
+						theHits.append(nn-1)
+					}
+				}
+				
+				
+			}
+		}
+		
+		for nn=1,theHits.size() {
+			forsec brEff[theHits.x[nn-1]]{
+				curSecs.append()
+			}
+		}
+		nextSecs = new SectionList()
+		
+		numSecs = 0
+		// Assign branch order and populate all potential next visited
+		// dendrites.
+		forsec curSecs {
+			brOrd_id = curOrd
+			nextSecs.children()
+			usedSecs.append()
+		}
+		
+		// Take only unique used sections.
+		usedSecs.unique()
+		
+		// Remove any branches that have already been assigned a 
+		// branch order.
+		forsec usedSecs {
+			secToMatch = secname()
+			forsec nextSecs {
+				if(abs(strcmp(secToMatch,secname()))<0.0001){
+					nextSecs.remove()
+				}
+			}
+		}
+			
+		// Calculate total number of remaining sections to visit.
+		forsec nextSecs {
+			numSecs +=1
+		}
+		curOrd+=1
+
+	}
+}
+
+

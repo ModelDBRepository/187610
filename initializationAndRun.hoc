@@ -1,0 +1,27 @@
+// DEFINE init AND run
+
+proc init() {
+	finitialize(v_init)
+	fcurrent()
+	
+	dtsave = dt
+	dt = 10
+	t = 1e06
+	for i = 0, 40 { fadvance() }
+	dt = dtsave
+	finitialize()
+	t = 0
+}
+
+
+proc run() {
+	stdinit()
+	continuerun(tstop)
+}
+
+
+// use variable time step
+objref cvode
+cvode = new CVode()
+cvode.active(1)
+execute("using_cvode_=1")
